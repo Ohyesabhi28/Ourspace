@@ -1,0 +1,14 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --background: 240 10% 3.9%;
+    --foreground: 0 0% 98%;
+  }
+
+  body {
+    color: hsl(var(--foreground));
+    background: linear-gradient(to bottom right, #2e023b, #000000);
+    min-height: 100vh;
+  }
+}

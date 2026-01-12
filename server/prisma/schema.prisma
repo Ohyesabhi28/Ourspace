@@ -1,0 +1,16 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Message {
+  id        Int      @id @default(autoincrement())
+  content   String
+  sender    String   // 'user1' or 'user2'
+  type      String   // 'text', 'image', 'video_call_start', 'video_call_end'
+  createdAt DateTime @default(now())
+}
