@@ -128,6 +128,24 @@ io.on('connection', (socket) => {
 
     saveMessage(newMessage);
     io.emit('receive_message', newMessage);
+
+    // Telegram Notification (Only when Tulu texts)
+    const normalizedSender = (data.sender || '').toLowerCase().trim();
+    if (
+      (normalizedSender === 'tulu' || normalizedSender === 'tulsi') &&
+      process.env.TELEGRAM_BOT_TOKEN &&
+      process.env.TELEGRAM_CHAT_ID
+    ) {
+      const text = `💌 New message from ${data.sender}:\n${data.type === 'image' ? '[Photo]' : data.content}`;
+      const url = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`;
+
+      // Node 18+ has native fetch
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: process.env.TELEGRAM_CHAT_ID, text: text })
+      }).catch(err => console.error("Telegram Error:", err));
+    }
   });
 
   // Signaling for Video Call

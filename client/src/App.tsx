@@ -21,6 +21,10 @@ const iceServers = {
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
+    { urls: 'stun:stun2.l.google.com:19302' },
+    { urls: 'stun:stun3.l.google.com:19302' },
+    { urls: 'stun:stun4.l.google.com:19302' },
+    { urls: 'stun:global.stun.twilio.com:3478' }
   ],
 };
 
@@ -151,7 +155,7 @@ function App() {
     });
 
     // Fetch initial history
-    fetch('/api/messages')
+    fetch(`${import.meta.env.VITE_SERVER_URL || ''}/api/messages`)
       .then(res => res.json())
       .then(data => {
         setMessages(data);
@@ -305,6 +309,16 @@ function App() {
     pc.ontrack = (event) => {
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = event.streams[0];
+      }
+    };
+
+    pc.onconnectionstatechange = () => {
+      console.log("Connection State:", pc.connectionState);
+      if (pc.connectionState === 'connected') {
+        setCallStatus('connected');
+      } else if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+        alert("Call connection failed. You might be on a restrictive network.");
+        endCallCleanup();
       }
     };
 
