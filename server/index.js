@@ -142,7 +142,7 @@ io.on('connection', (socket) => {
       process.env.TELEGRAM_BOT_TOKEN &&
       process.env.TELEGRAM_CHAT_ID
     ) {
-      const text = `💌 New message from ${data.sender}:\n${data.type === 'image' ? '[Photo]' : data.content}`;
+      const text = `🔒 New Encrypted Message from ${data.sender}`;
       const url = `https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`;
 
       // Node 18+ has native fetch
