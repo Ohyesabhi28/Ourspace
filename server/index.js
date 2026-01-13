@@ -2,8 +2,7 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
-const fs = require('fs');
-const path = require('path');
+const { PrismaClient } = require('@prisma/client');
 require('dotenv').config();
 
 const app = express();
@@ -16,29 +15,43 @@ const io = new Server(server, {
   }
 });
 
-const DB_FILE = path.join(__dirname, 'messages.json');
-
-// Helper to load messages
-function loadMessages() {
-  try {
-    if (fs.existsSync(DB_FILE)) {
-      const data = fs.readFileSync(DB_FILE, 'utf8');
-      return JSON.parse(data);
-    }
-  } catch (e) {
-    console.error("Failed to load messages", e);
-  }
-  return [];
-}
+const prisma = new PrismaClient();
 
 // Helper to save messages
-function saveMessage(msg) {
-  const messages = loadMessages();
-  messages.push(msg);
+async function saveMessage(msg) {
   try {
-    fs.writeFileSync(DB_FILE, JSON.stringify(messages, null, 2));
+    await prisma.message.create({
+      data: {
+        content: msg.content,
+        sender: msg.sender,
+        type: msg.type,
+        createdAt: msg.createdAt, // Ensure date is passed or let DB handle default
+      }
+    });
   } catch (e) {
     console.error("Failed to save message", e);
+  }
+}
+
+// Helper to update user status
+async function saveUserStatus(username, status) {
+  try {
+    const user = await prisma.user.upsert({
+      where: { username: username },
+      update: {
+        online: status.online,
+        lastSeen: status.lastSeen ? new Date(status.lastSeen) : null,
+      },
+      create: {
+        username: username,
+        online: status.online,
+        lastSeen: status.lastSeen ? new Date(status.lastSeen) : null,
+      },
+    });
+    return user;
+  } catch (e) {
+    console.error("Failed to save user status", e);
+    return { online: false, lastSeen: null };
   }
 }
 
@@ -46,42 +59,23 @@ app.use(cors());
 app.use(express.json());
 
 app.get('/', (req, res) => {
-  res.send('OurSpace Server is Running (JSON Mode)');
+  res.send('OurSpace Server is Running (PostgreSQL Mode)');
 });
 
-app.get('/api/messages', (req, res) => {
-  const messages = loadMessages();
-  // Return last 100
-  res.json(messages.slice(-100));
+app.get('/api/messages', async (req, res) => {
+  try {
+    const messages = await prisma.message.findMany({
+      orderBy: { createdAt: 'asc' }, // Get global history in order
+      take: 100 // Limit to last 100 for performance
+    });
+    res.json(messages);
+  } catch (e) {
+    console.error("Failed to fetch messages", e);
+    res.status(500).json({ error: "Failed to fetch messages" });
+  }
 });
 
-const USERS_FILE = path.join(__dirname, 'users.json');
 const socketUserMap = new Map(); // socketId -> username
-
-// Helper to load users
-function loadUsers() {
-  try {
-    if (fs.existsSync(USERS_FILE)) {
-      const data = fs.readFileSync(USERS_FILE, 'utf8');
-      return JSON.parse(data);
-    }
-  } catch (e) {
-    console.error("Failed to load users", e);
-  }
-  return {};
-}
-
-// Helper to save user status
-function saveUserStatus(username, status) {
-  const users = loadUsers();
-  users[username] = { ...users[username], ...status };
-  try {
-    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-  } catch (e) {
-    console.error("Failed to save user status", e);
-  }
-  return users[username];
-}
 
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
@@ -91,43 +85,55 @@ io.on('connection', (socket) => {
   });
 
   // User Login / Status Tracking
-  socket.on('user_login', (username) => {
+  socket.on('user_login', async (username) => {
     console.log(`User logged in: ${username}`);
     socketUserMap.set(socket.id, username);
 
     // Mark as online
-    const userStatus = saveUserStatus(username, { online: true, lastSeen: null });
+    const userStatus = await saveUserStatus(username, { online: true, lastSeen: null });
 
-    // Broadcast to everyone (simplest for 2 users)
+    // Broadcast to everyone
     io.emit('user_status_update', { username, status: userStatus });
 
     // Send current status of all users to the connecting user
-    const allUsers = loadUsers();
-    socket.emit('all_users_status', allUsers);
+    try {
+      const allUsersList = await prisma.user.findMany();
+      const allUsersMap = {};
+      allUsersList.forEach(u => {
+        allUsersMap[u.username] = u;
+      });
+      socket.emit('all_users_status', allUsersMap);
+    } catch (e) {
+      console.error("Failed to load users", e);
+    }
   });
 
-  socket.on('user_logout', () => {
+  socket.on('user_logout', async () => {
     const username = socketUserMap.get(socket.id);
     if (username) {
       console.log(`User logged out: ${username}`);
-      const userStatus = saveUserStatus(username, { online: false, lastSeen: new Date().toISOString() });
+      const userStatus = await saveUserStatus(username, { online: false, lastSeen: new Date().toISOString() });
       io.emit('user_status_update', { username, status: userStatus });
       socketUserMap.delete(socket.id);
     }
   });
 
-  socket.on('send_message', (data) => {
+  socket.on('send_message', async (data) => {
     // data: { content, sender, type }
     const newMessage = {
-      id: Date.now(),
       content: data.content,
       sender: data.sender,
       type: data.type || 'text',
-      createdAt: new Date().toISOString()
+      createdAt: new Date()
     };
 
-    saveMessage(newMessage);
-    io.emit('receive_message', newMessage);
+    // Optimistically update clients with a temp ID or similar, but here we just emit what we got
+    // Note: Database ID will be generated, but for real-time we might send `Date.now()` as ID if client needs it immediately
+    const messageForClient = { ...newMessage, id: Date.now(), createdAt: newMessage.createdAt.toISOString() };
+
+    io.emit('receive_message', messageForClient); // Send immediately for responsiveness
+
+    await saveMessage(newMessage); // Save to DB asynchronously
 
     // Telegram Notification (Only when Tulu texts)
     const normalizedSender = (data.sender || '').toLowerCase().trim();
@@ -167,12 +173,12 @@ io.on('connection', (socket) => {
     socket.broadcast.emit('call_ended');
   });
 
-  socket.on('disconnect', () => {
+  socket.on('disconnect', async () => {
     console.log('User disconnected:', socket.id);
     const username = socketUserMap.get(socket.id);
     if (username) {
       console.log(`Marking ${username} offline`);
-      const userStatus = saveUserStatus(username, { online: false, lastSeen: new Date().toISOString() });
+      const userStatus = await saveUserStatus(username, { online: false, lastSeen: new Date().toISOString() });
       io.emit('user_status_update', { username, status: userStatus });
       socketUserMap.delete(socket.id);
     }

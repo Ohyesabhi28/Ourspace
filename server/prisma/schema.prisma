@@ -3,8 +3,8 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 model Message {
@@ -13,4 +13,11 @@ model Message {
   sender    String   // 'user1' or 'user2'
   type      String   // 'text', 'image', 'video_call_start', 'video_call_end'
   createdAt DateTime @default(now())
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  username  String   @unique
+  online    Boolean  @default(false)
+  lastSeen  DateTime?
 }
