@@ -20,7 +20,8 @@ const prisma = new PrismaClient();
 // Helper to save messages
 async function saveMessage(msg) {
   try {
-    await prisma.message.create({
+    console.log("Attempting to save message:", JSON.stringify(msg));
+    const savedMsg = await prisma.message.create({
       data: {
         content: msg.content,
         sender: msg.sender,
@@ -28,6 +29,7 @@ async function saveMessage(msg) {
         createdAt: msg.createdAt, // Ensure date is passed or let DB handle default
       }
     });
+    console.log("Message saved successfully:", savedMsg.id);
   } catch (e) {
     console.error("Failed to save message", e);
     throw e; // Re-throw to handle in the socket handler
@@ -69,6 +71,7 @@ app.get('/api/messages', async (req, res) => {
       orderBy: { createdAt: 'asc' }, // Get global history in order
       take: 100 // Limit to last 100 for performance
     });
+    console.log(`Fetched ${messages.length} messages from DB`);
     res.json(messages);
   } catch (e) {
     console.error("Failed to fetch messages", e);
