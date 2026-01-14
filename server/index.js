@@ -9,8 +9,8 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    // Allow the deployed frontend (Netlify) and local dev
-    origin: process.env.CLIENT_URL || "*",
+    // Allow any origin for debugging deployment issues
+    origin: "*",
     methods: ["GET", "POST"]
   }
 });

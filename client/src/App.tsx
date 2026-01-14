@@ -6,7 +6,14 @@ import { cn } from './lib/utils';
 
 // Socket connection
 // In production, VITE_SERVER_URL must be set to your backend URL (e.g., https://ourspace-backend.onrender.com)
-const socket = io(import.meta.env.VITE_SERVER_URL || undefined);
+// Helper to determine the server URL dynamically
+const getBaseUrl = () => {
+  if (import.meta.env.VITE_SERVER_URL) return import.meta.env.VITE_SERVER_URL;
+  // Fallback to the same hostname as the client, but port 3001
+  return `${window.location.protocol}//${window.location.hostname}:3001`;
+};
+
+const socket = io(getBaseUrl());
 
 type Message = {
   id: number;
@@ -34,6 +41,7 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passkeyInput, setPasskeyInput] = useState('');
   const [userChange, setUserChange] = useState('');
+  const [isConnected, setIsConnected] = useState(socket.connected);
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputText, setInputText] = useState('');
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -87,6 +95,7 @@ function App() {
     // Handle Reconnection
     const onConnect = () => {
       console.log("Connected/Reconnected to server");
+      setIsConnected(true);
       if (sessionStorage.getItem('ourspace_user')) {
         socket.emit('user_login', sessionStorage.getItem('ourspace_user'));
       }
@@ -98,6 +107,16 @@ function App() {
     if (socket.connected) {
       onConnect();
     }
+
+    socket.on('disconnect', () => {
+      console.log("Disconnected from server");
+      setIsConnected(false);
+    });
+
+    socket.on('connect_error', (err: any) => {
+      console.error("Connection Error:", err);
+      setIsConnected(false);
+    });
 
     socket.on('receive_message', (data: Message) => {
       setMessages((prev) => [...prev, data]);
@@ -155,7 +174,7 @@ function App() {
     });
 
     // Fetch initial history
-    fetch(`${import.meta.env.VITE_SERVER_URL || ''}/api/messages`)
+    fetch(`${getBaseUrl()}/api/messages`)
       .then(res => res.json())
       .then(data => {
         setMessages(data);
@@ -439,12 +458,13 @@ function App() {
           <h2 className="text-xl font-bold bg-gradient-to-r from-pink-400 to-purple-400 bg-clip-text text-transparent">
             {partnerName}
           </h2>
-          <span className="text-xs text-zinc-500">
+          <span className="text-xs text-zinc-500 flex items-center gap-2">
             {partnerStatus.online ? (
               <span className="text-green-500 font-medium animate-pulse">Online</span>
             ) : (
               <span>OurSpace</span>
             )}
+            <span className={cn("w-2 h-2 rounded-full", isConnected ? "bg-green-500" : "bg-red-500")} title={isConnected ? "Connected to Server" : "Disconnected"} />
           </span>
         </div>
         <div className="flex gap-4 items-center">
