@@ -174,15 +174,30 @@ function App() {
     });
 
     // Fetch initial history
-    fetch(`${getBaseUrl()}/api/messages`)
-      .then(res => res.json())
+    const apiUrl = `${getBaseUrl()}/api/messages`;
+    console.log("Fetching messages from:", apiUrl);
+    fetch(apiUrl)
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP error! status: ${res.status}`);
+        return res.json();
+      })
       .then(data => {
+        console.log("Messages fetched:", data.length);
         setMessages(data);
         setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 500);
+      })
+      .catch(err => {
+        console.error("Failed to fetch messages:", err);
+        alert(`Failed to load message history from ${apiUrl}. Check console for details.`);
       });
+
+    socket.on('message_error', (errMsg) => {
+      alert(errMsg);
+    });
 
     return () => {
       socket.off('receive_message');
+      socket.off('message_error');
       socket.off('call_incoming');
       socket.off('call_answered');
       socket.off('ice_candidate');

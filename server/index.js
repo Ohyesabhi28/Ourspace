@@ -30,6 +30,7 @@ async function saveMessage(msg) {
     });
   } catch (e) {
     console.error("Failed to save message", e);
+    throw e; // Re-throw to handle in the socket handler
   }
 }
 
@@ -133,7 +134,11 @@ io.on('connection', (socket) => {
 
     io.emit('receive_message', messageForClient); // Send immediately for responsiveness
 
-    await saveMessage(newMessage); // Save to DB asynchronously
+    try {
+      await saveMessage(newMessage); // Save to DB asynchronously
+    } catch (e) {
+      socket.emit('message_error', "Server Error: Message was not saved to database!");
+    }
 
     // Telegram Notification (Only when Tulu texts)
     const normalizedSender = (data.sender || '').toLowerCase().trim();
