@@ -68,11 +68,13 @@ app.get('/', (req, res) => {
 app.get('/api/messages', async (req, res) => {
   try {
     const messages = await prisma.message.findMany({
-      orderBy: { createdAt: 'asc' }, // Get global history in order
-      take: 100 // Limit to last 100 for performance
+      orderBy: { createdAt: 'desc' }, // Get NEWEST first
+      take: 100 // Limit to last 100
     });
-    console.log(`Fetched ${messages.length} messages from DB`);
-    res.json(messages);
+    // Reverse them so client gets them in chronological order (oldest -> newest)
+    const reversedMessages = messages.reverse();
+    console.log(`Fetched ${reversedMessages.length} messages from DB (Recent 100)`);
+    res.json(reversedMessages);
   } catch (e) {
     console.error("Failed to fetch messages", e);
     res.status(500).json({ error: "Failed to fetch messages" });
