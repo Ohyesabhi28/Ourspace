@@ -9,7 +9,13 @@ import { cn } from './lib/utils';
 // Helper to determine the server URL dynamically
 const getBaseUrl = () => {
   if (import.meta.env.VITE_SERVER_URL) return import.meta.env.VITE_SERVER_URL;
-  // Fallback to the same hostname as the client, but port 3001
+  
+  if (import.meta.env.PROD) {
+    console.warn("VITE_SERVER_URL is not set in production. Using current origin.");
+    return window.location.origin; // If hosted together in production
+  }
+  
+  // Fallback for local development
   return `${window.location.protocol}//${window.location.hostname}:3001`;
 };
 
